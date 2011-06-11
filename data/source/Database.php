@@ -11,7 +11,6 @@ namespace lithium\data\source;
 use lithium\util\String;
 use lithium\util\Inflector;
 use InvalidArgumentException;
-use lithium\data\model\Query;
 
 /**
  * The `Database` class provides the base-level abstraction for SQL-oriented relational databases.
@@ -267,6 +266,35 @@ abstract class Database extends \lithium\data\Source {
 			if (is_string($query)) {
 				$sql = String::insert($query, $self->value($args));
 			} else {
+				$relationships = $query->relationships();
+				$hasMany = false;
+				foreach ($relationships as $relationship) {
+					$hasMany = $hasMany || $relationship['type'] == 'hasMany';
+				}
+				if ($hasMany && $query->limit() && !isset($args['subquery'])) {
+					$name = $model::meta('name');
+					$key = $model::key();
+
+					$subQuery = $self->invokeMethod('_instance', array(
+							get_class($query), array(
+								'type' => 'read',
+								'model' => $model,
+								'group' => "{$name}.{$key}",
+								'fields' => array("{$name}.{$key}"),
+								'joins' => $query->joins(),
+								'conditions' => $query->conditions(),
+								'limit' => $query->limit(),
+								'page' => $query->page(),
+								'order' => $query->order()
+							)
+						));
+					$ids = $self->read($subQuery, array('subquery' => true));
+					$idData = $ids->data();
+					$ids = array_map(function($index) use ($key) {
+							return $index[$key];
+						}, $idData);
+					$query->limit(false)->conditions(array("{$name}.{$key}" => $ids));
+				}
 				$sql = $self->renderCommand($query);
 			}
 			$result = $self->invokeMethod('_execute', array($sql));
@@ -277,7 +305,7 @@ abstract class Database extends \lithium\data\Source {
 				case 'array':
 					$columns = $args['schema'] ?: $self->schema($query, $result);
 					$records = array();
-					if(is_array(reset($columns))) {
+					if (is_array(reset($columns))) {
 						$columns = reset($columns);
 					}
 					while ($data = $result->next()) {
@@ -290,7 +318,7 @@ abstract class Database extends \lithium\data\Source {
 					return $records;
 				case 'item':
 					return $self->item($query->model(), array(), compact('query', 'result') + array(
-						'class' => 'set',
+						'class' => 'set'
 					));
 			}
 		});
@@ -444,9 +472,9 @@ abstract class Database extends \lithium\data\Source {
 			return array($modelName => array_keys($model::schema()));
 		}
 
-		if(!$fields && $joins) {
+		if (!$fields && $joins) {
 			$return = array($modelName => array_keys($model::schema()));
-			foreach($joins as $join) {
+			foreach ($joins as $join) {
 				$model = $join->model();
 				$return[$join->alias()] = array_keys($model::schema());
 			}
@@ -455,7 +483,7 @@ abstract class Database extends \lithium\data\Source {
 
 		$relations = array_keys((array) $query->relationships());
 		$schema = $model::schema();
-		$pregDotMatch = '/^(' . implode('|', array_merge($relations, array($modelName))). ')\./';
+		$pregDotMatch = '/^(' . implode('|', array_merge($relations, array($modelName))) . ')\./';
 		$forJoin = ($modelName != $query->alias());
 		foreach ($fields as $scope => $field) {
 			switch (true) {
@@ -476,14 +504,14 @@ abstract class Database extends \lithium\data\Source {
 					continue;
 				case in_array($scope, $relations) && is_array($field):
 					$join = isset($joins[$scope]) ? $joins[$scope] : null;
-					if($join) {
+					if ($join) {
 						$relSchema = $this->schema($query, $join->model(), $join);
 						$result[$scope] = reset($relSchema);
 					}
 				break;
 				case is_numeric($scope) && in_array($field, $relations):
 					$join = isset($joins[$field]) ? $joins[$field] : null;
-					if(!$join) {
+					if (!$join) {
 						continue;
 					}
 					$scope = $join->model();
@@ -491,9 +519,9 @@ abstract class Database extends \lithium\data\Source {
 				break;
 			}
 		}
-		if(!$forJoin) {
-			$sortOrder = array_flip(array_merge(array($modelName),$relations));
-			uksort($result, function($a, $b) use($sortOrder) {
+		if (!$forJoin) {
+			$sortOrder = array_flip(array_merge(array($modelName), $relations));
+			uksort($result, function($a, $b) use ($sortOrder) {
 				return $sortOrder[$a] - $sortOrder[$b];
 			});
 		}
@@ -614,12 +642,12 @@ abstract class Database extends \lithium\data\Source {
 		$groupFields = function($item, $key) use (&$toMerge, &$keys, $modelNames, &$context) {
 			$name = current($keys);
 			next($keys);
-			switch(true) {
+			switch (true) {
 				case is_array($item):
 					$toMerge[$name] = $item;
 					continue;
 				case in_array($item, $modelNames):
-					if($item == reset($modelNames)) {
+					if ($item == reset($modelNames)) {
 						$schema = $context->schema();
 					} else {
 						$joins = $context->joins();
@@ -643,25 +671,25 @@ abstract class Database extends \lithium\data\Source {
 		};
 		array_walk($fields, $groupFields);
 		$fields = $toMerge;
-		if(count($modelNames) > 1) {
+		if (count($modelNames) > 1) {
 			$sortOrder = array_flip($modelNames);
-			uksort($fields, function($a, $b) use($sortOrder) {
+			uksort($fields, function($a, $b) use ($sortOrder) {
 				return $sortOrder[$a] - $sortOrder[$b];
 			});
 		}
 		$mapFields = function() use($fields, $modelNames) {
 			$return = array();
-			foreach($fields as $key => $items) {
-				if(!is_array($items)) {
+			foreach ($fields as $key => $items) {
+				if (!is_array($items)) {
 					$return[$key] = $items;
 					continue;
 				}
-				if(is_numeric($key)) {
+				if (is_numeric($key)) {
 					$key = reset($modelNames);
 				}
 				$pointer = &$return[$key];
-				foreach($items as $field) {
-					if(stripos($field, ' as ') !== false) {
+				foreach ($items as $field) {
+					if (stripos($field, ' as ') !== false) {
 						list($real, $as) = explode(' as ', str_replace(' AS ', ' as ', $field));
 						$pointer[] = trim($as);
 						continue;
@@ -674,8 +702,8 @@ abstract class Database extends \lithium\data\Source {
 		$context->map($mapFields());
 
 		$toMerge = array();
-		foreach($fields as $scope => $items) {
-			foreach($items as $field) {
+		foreach ($fields as $scope => $items) {
+			foreach ($items as $field) {
 				if (!is_numeric($scope)) {
 					$toMerge[] = $scope . '.' . $field;
 					continue;
@@ -865,7 +893,7 @@ abstract class Database extends \lithium\data\Source {
 		$key = $this->name($key);
 		$values = array();
 
-		if(!is_object($value)) {
+		if (!is_object($value)) {
 			foreach ((array) $value as $val) {
 				$values[] = $this->value($val, $schema);
 			}
