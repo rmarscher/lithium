@@ -241,7 +241,7 @@ abstract class Database extends \lithium\data\Source {
 	 * Reads records from a database using a `lithium\data\model\Query` object or raw SQL string.
 	 *
 	 * @param string|object $query `lithium\data\model\Query` object or SQL string.
-	 * @param string $options If `$query` is a raw string, contains the values that will be escaped
+	 * @param array $options If `$query` is a raw string, contains the values that will be escaped
 	 *               and quoted. Other options:
 	 *               - `'return'` _string_: switch return between `'array'`, `'item'`, or
 	 *                 `'resource'` _string_: Defaults to `'item'`.
@@ -261,17 +261,12 @@ abstract class Database extends \lithium\data\Source {
 			unset($args['return']);
 
 			$model = is_object($query) ? $query->model() : null;
-			$schema = !is_null($model) ? $model::schema() : array();
 
 			if (is_string($query)) {
 				$sql = String::insert($query, $self->value($args));
 			} else {
-				$relationships = $query->relationships();
-				$hasMany = false;
-				foreach ($relationships as $relationship) {
-					$hasMany = $hasMany || $relationship['type'] == 'hasMany';
-				}
-				if ($hasMany && $query->limit() && !isset($args['subquery'])) {
+				$limit = $query->limit();
+				if ($model && $limit && !isset($args['subquery']) && $model::relations('hasMany')) {
 					$name = $model::meta('name');
 					$key = $model::key();
 
