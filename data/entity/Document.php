@@ -366,8 +366,8 @@ class Document extends \lithium\data\Entity implements \Iterator, \ArrayAccess {
 	public function rewind() {
 		reset($this->_data);
 		reset($this->_updated);
-		$this->_valid = (count($this->_updated) > 0);
-		return current($this->_updated);
+		$this->_valid = (count($this->_data) > 0);
+		return current($this->_data);
 	}
 
 	/**
