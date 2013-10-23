@@ -366,8 +366,8 @@ class Document extends \lithium\data\Entity implements \Iterator, \ArrayAccess {
 	public function rewind() {
 		reset($this->_data);
 		reset($this->_updated);
-		$this->_valid = (count($this->_data) > 0);
-		return current($this->_data);
+		$this->_valid = (count($this->_updated) > 0);
+		return current($this->_updated);
 	}
 
 	/**
@@ -381,12 +381,12 @@ class Document extends \lithium\data\Entity implements \Iterator, \ArrayAccess {
 	}
 
 	public function current() {
-		$current = current($this->_data);
-		return isset($this->_removed[key($this->_data)]) ? null : $current;
+		$current = current($this->_updated);
+		return isset($this->_removed[key($this->_updated)]) ? null : $current;
 	}
 
 	public function key() {
-		$key = key($this->_data);
+		$key = key($this->_updated);
 		return isset($this->_removed[$key]) ? false : $key;
 	}
 
@@ -416,9 +416,9 @@ class Document extends \lithium\data\Entity implements \Iterator, \ArrayAccess {
 	 *         available.
 	 */
 	public function next() {
-		$prev = key($this->_data);
-		$this->_valid = (next($this->_data) !== false);
-		$cur = key($this->_data);
+		$prev = key($this->_updated);
+		$this->_valid = (next($this->_updated) !== false);
+		$cur = key($this->_updated);
 
 		if (isset($this->_removed[$cur])) {
 			return $this->next();
@@ -426,7 +426,7 @@ class Document extends \lithium\data\Entity implements \Iterator, \ArrayAccess {
 		if (!$this->_valid && $cur !== $prev && $cur !== null) {
 			$this->_valid = true;
 		}
-		return $this->_valid ? $this->__get(key($this->_data)) : null;
+		return $this->_valid ? $this->__get(key($this->_updated)) : null;
 	}
 
 	/**
