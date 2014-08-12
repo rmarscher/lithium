@@ -533,7 +533,27 @@ class MongoDb extends \lithium\data\Source {
 			if ($options['multiple'] && !preg_grep('/^\$/', array_keys($update))) {
 				$update = array('$set' => $update);
 			}
-			if ($self->connection->{$source}->update($args['conditions'], $update, $options)) {
+
+			// avoids potential Mongo error: "Modifiers operate on fields but
+			// we found a Array instead. For example: {$mod: {<field>: ...}} not {$set: []}"
+			$emptyOk = false;
+			if (array_key_exists('$set', $update) && empty($update['$set'])) {
+				unset($update['$set']);
+				if (empty($update)) {
+					$emptyOk = true;
+				}
+			}
+
+			$result = $emptyOk;
+			if (!empty($update)) {
+				$result = $self->connection->{$source}->update(
+					$args['conditions'],
+					$update,
+					$options
+				);
+			}
+
+			if ($result) {
 				$query->entity() ? $query->entity()->sync() : null;
 				return true;
 			}
