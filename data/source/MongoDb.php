@@ -68,7 +68,8 @@ class MongoDb extends \lithium\data\Source {
 		'set'      => 'lithium\data\collection\DocumentSet',
 		'result'   => 'lithium\data\source\mongo_db\Result',
 		'exporter' => 'lithium\data\source\mongo_db\Exporter',
-		'relationship' => 'lithium\data\model\Relationship'
+		'relationship' => 'lithium\data\model\Relationship',
+		'server'   => 'MongoClient'
 	);
 
 	/**
@@ -79,15 +80,25 @@ class MongoDb extends \lithium\data\Source {
 	protected $_operators = array(
 		'<'   => '$lt',
 		'>'   => '$gt',
-		'<='  =>  '$lte',
+		'<='  => '$lte',
 		'>='  => '$gte',
 		'!='  => array('single' => '$ne', 'multiple' => '$nin'),
 		'<>'  => array('single' => '$ne', 'multiple' => '$nin'),
 		'or'  => '$or',
 		'||'  => '$or',
 		'not' => '$not',
-		'!'   =>  '$not'
+		'!'   => '$not',
+		'and' => '$and',
+		'&&'  => '$and',
+		'nor' => '$nor'
 	);
+
+	/**
+	 * List of comparison operators to use when performing boolean logic in a query.
+	 *
+	 * @var array
+	 */
+	protected $_boolean = array('&&', '||', 'and', '$and', 'or', '$or', 'nor', '$nor');
 
 	/**
 	 * A closure or anonymous function which receives an instance of this class, a collection name
@@ -145,16 +156,25 @@ class MongoDb extends \lithium\data\Source {
 	 * list of active connections.
 	 */
 	public function __construct(array $config = array()) {
-		$defaults = array(
+		$host = 'localhost:27017';
+
+		$server = $this->_classes['server'];
+		if (class_exists($server, false)) {
+			$host = $server::DEFAULT_HOST . ':' . $server::DEFAULT_PORT;
+		}
+		$defaults = compact('host') + array(
 			'persistent' => false,
 			'login'      => null,
 			'password'   => null,
-			'host'       => MongoClient::DEFAULT_HOST . ':' . MongoClient::DEFAULT_PORT,
 			'database'   => null,
 			'timeout'    => 100,
 			'replicaSet' => false,
 			'schema'     => null,
-			'gridPrefix' => 'fs'
+			'gridPrefix' => 'fs',
+			'w'          => 1,
+			'wTimeoutMS' => 10000,
+			'readPreference' => null,
+			'autoConnect' => false
 		);
 		parent::__construct($config + $defaults);
 	}
@@ -243,28 +263,37 @@ class MongoDb extends \lithium\data\Source {
 	 * @return boolean Returns `true` the connection attempt was successful, otherwise `false`.
 	 */
 	public function connect() {
+		if ($this->server && $this->server->connected && $this->connection) {
+			return $this->_isConnected = true;
+		}
+
 		$cfg = $this->_config;
 		$this->_isConnected = false;
 
 		$host = is_array($cfg['host']) ? join(',', $cfg['host']) : $cfg['host'];
 		$login = $cfg['login'] ? "{$cfg['login']}:{$cfg['password']}@" : '';
 		$connection = "mongodb://{$login}{$host}" . ($login ? "/{$cfg['database']}" : '');
+
 		$options = array(
-			'connect' => true, 'timeout' => $cfg['timeout'], 'replicaSet' => $cfg['replicaSet']
+			'connect' => true,
+			'connectTimeoutMS' => $cfg['timeout'],
+			'replicaSet' => $cfg['replicaSet']
 		);
-		if ($options['timeout']) {
-			$options['connectTimeoutMS'] = $options['timeout'];
-			unset($options['timeout']);
-		}
 
 		try {
 			if ($persist = $cfg['persistent']) {
 				$options['persist'] = $persist === true ? 'default' : $persist;
 			}
-			$this->server = new MongoClient($connection, $options);
+			$server = $this->_classes['server'];
+			$this->server = new $server($connection, $options);
 
 			if ($this->connection = $this->server->{$cfg['database']}) {
 				$this->_isConnected = true;
+			}
+
+			if ($prefs = $cfg['readPreference']) {
+				$prefs = !is_array($prefs) ? array($prefs, array()) : $prefs;
+				$this->server->setReadPreference($prefs[0], $prefs[1]);
 			}
 		} catch (Exception $e) {
 			throw new NetworkException("Could not connect to the database.", 503, $e);
